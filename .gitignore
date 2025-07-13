@@ -1,7 +1,12 @@
+# Virtual environments
 venv/
+.venv/
+
+# Local scripts
 run.bat
 
 # Python cache files
 scripts/__pycache__/
 __pycache__/
 *.py[cod]
+*.pyc
