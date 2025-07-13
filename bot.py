@@ -3,8 +3,6 @@ import random
 import logging
 from datetime import datetime, time, timedelta
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 import openai
@@ -23,8 +21,6 @@ if not TELEGRAM_BOT_TOKEN or not OPENAI_API_KEY:
     raise SystemExit("Missing TELEGRAM_BOT_TOKEN or OPENAI_API_KEY")
 
 openai.api_key = OPENAI_API_KEY
-
-scheduler = AsyncIOScheduler(timezone=pytz.timezone(TIMEZONE))
 
 tz = pytz.timezone(TIMEZONE)
 
@@ -61,7 +57,8 @@ async def send_bedtime(context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=chat_id, text=msg)
 
 def schedule_daily_updates(application):
-    scheduler.remove_all_jobs()
+    job_queue = application.job_queue
+    job_queue.scheduler.remove_all_jobs()
     now = datetime.now(tz)
     def random_time():
         start = datetime.combine(now.date(), time(8, 0, tzinfo=tz))
@@ -73,16 +70,19 @@ def schedule_daily_updates(application):
     t1 = random_time()
     t2 = random_time()
     for t in sorted([t1, t2]):
-        scheduler.add_job(send_random_update, CronTrigger(hour=t.hour, minute=t.minute, timezone=tz), args=(ContextTypes.DEFAULT_TYPE,), id=f"update_{t.hour}_{t.minute}")
-    scheduler.add_job(send_bedtime, CronTrigger(hour=22, minute=30, timezone=tz), id="bedtime")
-    scheduler.add_job(schedule_daily_updates, CronTrigger(hour=0, minute=0, timezone=tz), args=[application], id="reschedule")
+        job_queue.run_daily(send_random_update, time=t, name=f"update_{t.hour}_{t.minute}")
+    job_queue.run_daily(send_bedtime, time=time(hour=22, minute=30), name="bedtime")
+
+    def reschedule(context: ContextTypes.DEFAULT_TYPE):
+        schedule_daily_updates(context.application)
+
+    job_queue.run_daily(reschedule, time=time(hour=0, minute=0), name="reschedule")
 
 async def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     schedule_daily_updates(application)
-    scheduler.start()
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
