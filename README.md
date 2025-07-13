@@ -12,3 +12,17 @@ OPENAI_MODEL=gpt-4.1-nano
 USER_CHAT_ID=...  # optional
 TIMEZONE=Europe/London
 ```
+
+## Running locally
+Install dependencies and start the bot:
+```bash
+pip install -r requirements.txt
+python bot.py
+```
+
+## Deploying on Google Cloud Run
+Build and deploy the container:
+```bash
+docker build -t telegram-bot .
+# then push to a registry and deploy using gcloud run deploy
+```
