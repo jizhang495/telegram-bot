@@ -70,13 +70,28 @@ def schedule_daily_updates(application):
     t1 = random_time()
     t2 = random_time()
     for t in sorted([t1, t2]):
-        job_queue.run_daily(send_random_update, time=t, name=f"update_{t.hour}_{t.minute}")
-    job_queue.run_daily(send_bedtime, time=time(hour=22, minute=30), name="bedtime")
+        job_queue.run_daily(
+            send_random_update,
+            time=t,
+            name=f"update_{t.hour}_{t.minute}",
+            chat_id=USER_CHAT_ID,
+        )
+    job_queue.run_daily(
+        send_bedtime,
+        time=time(hour=22, minute=30),
+        name="bedtime",
+        chat_id=USER_CHAT_ID,
+    )
 
     def reschedule(context: ContextTypes.DEFAULT_TYPE):
         schedule_daily_updates(context.application)
 
-    job_queue.run_daily(reschedule, time=time(hour=0, minute=0), name="reschedule")
+    job_queue.run_daily(
+        reschedule,
+        time=time(hour=0, minute=0),
+        name="reschedule",
+        chat_id=USER_CHAT_ID,
+    )
 
 async def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
