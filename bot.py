@@ -38,6 +38,7 @@ async def gpt_reply(prompt: str) -> str:
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
+    logger.info("User said: %s", user_text)
     reply = await gpt_reply(user_text)
     await update.message.reply_text(reply)
 
