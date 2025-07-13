@@ -14,7 +14,7 @@ TIMEZONE=Europe/London
 ```
 
 ## Running locally
-Install dependencies and start the bot:
+Install dependencies (requires `openai==0.28`) and start the bot:
 ```bash
 pip install -r requirements.txt
 python bot.py
