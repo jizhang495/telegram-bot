@@ -2,6 +2,7 @@ import os
 import random
 import logging
 from datetime import datetime, time, timedelta
+from aiohttp import web
 
 from telegram import Update
 from telegram.ext import (
@@ -22,6 +23,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-nano")
 USER_CHAT_ID = os.environ.get("USER_CHAT_ID")
 TIMEZONE = os.environ.get("TIMEZONE", "UTC")
+BOT_URL = os.environ.get("BOT_URL", "ask creator")
 
 if not TELEGRAM_BOT_TOKEN or not OPENAI_API_KEY:
     raise SystemExit("Missing TELEGRAM_BOT_TOKEN or OPENAI_API_KEY")
@@ -57,7 +59,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hey! I'm here whenever you want to chat.")
+    """Start command - wakes up the bot and provides Cloud Run URL"""
+    await update.message.reply_text(
+        f"👋 Hey! I'm here whenever you want to chat!\n\n"
+        f"🌐 Bot URL: {BOT_URL}\n"
+        f"💡 If I seem slow, you can click the URL above to wake me up.\n\n"
+    )
 
 
 async def send_random_update(context: ContextTypes.DEFAULT_TYPE):
@@ -113,15 +120,50 @@ def schedule_daily_updates(application):
     )
 
 
-def main():
+async def health_check(request):
+    """Health check endpoint for Cloud Run"""
+    return web.Response(text="OK")
+
+async def main():
+    """Initialize the bot application"""
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
     )
     schedule_daily_updates(application)
-    application.run_polling()
-
+    
+    # Start the bot
+    await application.initialize()
+    await application.start()
+    
+    # Create web server for Cloud Run
+    app = web.Application()
+    app.router.add_get('/', health_check)
+    app.router.add_get('/health', health_check)
+    
+    # Get port from environment variable (Cloud Run requirement)
+    port = int(os.environ.get('PORT', 8080))
+    
+    logger.info(f"Starting bot and web server on port {port}")
+    
+    # Start web server
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    
+    # Keep the bot running
+    try:
+        await application.updater.start_polling()
+        # Keep the application running
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+    finally:
+        await application.stop()
+        await runner.cleanup()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())

@@ -26,3 +26,6 @@ Build and deploy the container:
 docker build -t telegram-bot .
 # then push to a registry and deploy using gcloud run deploy
 ```
+
+TODO:
+- [ ] Store chat history and chat summary on Cloud server to have memory of conversation
