@@ -33,14 +33,7 @@ openai.api_key = OPENAI_API_KEY
 tz = pytz.timezone(TIMEZONE)
 
 
-async def gpt_reply(prompt: str) -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": "You are a close female friend chatting in a warm, supportive tone.",
-        },
-        {"role": "user", "content": prompt},
-    ]
+async def gpt_reply(messages: list) -> str:
     try:
         resp = await openai.ChatCompletion.acreate(
             model=OPENAI_MODEL, messages=messages
@@ -54,7 +47,32 @@ async def gpt_reply(prompt: str) -> str:
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     logger.info("User said: %s", user_text)
-    reply = await gpt_reply(user_text)
+    
+    # Initialize conversation history if not present
+    if 'conversation_history' not in context.user_data:
+        context.user_data['conversation_history'] = []
+    
+    history = context.user_data['conversation_history']
+    history.append({"role": "user", "content": user_text})
+    
+    # Keep last 20 messages (10 exchanges) to manage tokens
+    if len(history) > 20:
+        history = history[-20:]
+        context.user_data['conversation_history'] = history
+    
+    # Build full message list with system message
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a close female friend chatting in a warm, supportive tone.",
+        }
+    ] + history
+    
+    reply = await gpt_reply(messages)
+    
+    # Add assistant's response to history
+    history.append({"role": "assistant", "content": reply})
+    
     await update.message.reply_text(reply)
 
 
@@ -62,22 +80,43 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command - wakes up the bot and provides Cloud Run URL"""
     await update.message.reply_text(
         f"👋 Hey! I'm here whenever you want to chat!\n\n"
-        f"🌐 Bot URL: {BOT_URL}\n"
+        f"Bot URL: {BOT_URL}\n"
         f"💡 If I seem slow, you can click the URL above to wake me up.\n\n"
+        f"My source code: https://github.com/jizhang495/telegram-bot\n\n"
     )
+
+
+async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Clear command - resets conversation history for the user"""
+    context.user_data['conversation_history'] = []
+    await update.message.reply_text("🗑️ Conversation history cleared! Starting fresh.")
 
 
 async def send_random_update(context: ContextTypes.DEFAULT_TYPE):
     chat_id = USER_CHAT_ID or context.job.chat_id
     prompt = "Share a short update or fun fact for the day in one or two sentences."
-    msg = await gpt_reply(prompt)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a close female friend chatting in a warm, supportive tone.",
+        },
+        {"role": "user", "content": prompt},
+    ]
+    msg = await gpt_reply(messages)
     await context.bot.send_message(chat_id=chat_id, text=msg)
 
 
 async def send_bedtime(context: ContextTypes.DEFAULT_TYPE):
     chat_id = USER_CHAT_ID or context.job.chat_id
     prompt = "Say goodnight and check in warmly in one or two sentences."
-    msg = await gpt_reply(prompt)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a close female friend chatting in a warm, supportive tone.",
+        },
+        {"role": "user", "content": prompt},
+    ]
+    msg = await gpt_reply(messages)
     await context.bot.send_message(chat_id=chat_id, text=msg)
 
 
@@ -128,6 +167,7 @@ async def main():
     """Initialize the bot application"""
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
     )
